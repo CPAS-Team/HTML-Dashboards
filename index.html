@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Activities & Violations Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+  <script src="graph-config.js"></script>
+  <style>
+    :root {
+      --navy:#10243e; --navy2:#17395f; --blue:#2f72b7; --cyan:#56b3c2;
+      --orange:#e68a3f; --gold:#f0ba58; --ink:#17202b; --muted:#657180;
+      --paper:#f3f6f9; --card:#fff; --line:#dce4eb; --shadow:0 10px 28px rgba(17,36,62,.09);
+    }
+    *{box-sizing:border-box} body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.45 Inter,Segoe UI,Arial,sans-serif}
+    button,select,input{font:inherit} button{cursor:pointer}
+    .topbar{background:linear-gradient(120deg,var(--navy),var(--navy2));color:#fff;padding:24px clamp(18px,4vw,56px) 72px;position:relative;overflow:hidden}
+    .topbar:after{content:"";position:absolute;width:360px;height:360px;border:70px solid rgba(86,179,194,.09);border-radius:50%;right:-100px;top:-170px}
+    .brand{display:flex;align-items:center;justify-content:space-between;gap:20px;position:relative;z-index:1}
+    .eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#a9d6df;font-weight:700}
+    h1{font-size:clamp(24px,3vw,38px);line-height:1.1;margin:6px 0 7px;letter-spacing:-.025em}
+    .subtitle{margin:0;color:#d6e1eb;max-width:720px}
+    .file-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+    .load-btn{border:1px solid rgba(255,255,255,.35);background:#fff;color:var(--navy);border-radius:9px;padding:10px 14px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.14)}
+    #fileInput{display:none}.file-name{font-size:12px;color:#d6e1eb;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    main{max-width:1500px;margin:-46px auto 45px;padding:0 clamp(14px,3vw,40px);position:relative;z-index:2}
+    .shell{background:var(--card);border-radius:16px;box-shadow:var(--shadow);border:1px solid rgba(220,228,235,.7);overflow:hidden}
+    .tabs{display:flex;background:#f9fbfc;border-bottom:1px solid var(--line);padding:0 20px;gap:4px}
+    .tab{border:0;background:transparent;padding:17px 18px;color:var(--muted);font-weight:700;border-bottom:3px solid transparent}
+    .tab.active{color:var(--blue);border-color:var(--blue)}
+    .page{display:none;padding:23px}.page.active{display:block}
+    .toolbar{display:flex;align-items:end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+    .toolbar-left,.filters{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+    .field label{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px}
+    select{min-width:185px;background:#fff;border:1px solid #cfd9e1;border-radius:8px;padding:9px 34px 9px 11px;color:var(--ink)}
+    select[multiple]{min-width:230px;height:118px;padding:5px}.filter-help{font-size:11px;color:var(--muted);margin-top:5px}
+    .status{border-radius:20px;padding:7px 11px;font-size:12px;font-weight:700;background:#e9f6f2;color:#25715d}.status.warn{background:#fff3df;color:#9a5d12}
+    .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:17px}
+    .kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 17px;position:relative;overflow:hidden}
+    .kpi:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--blue))}
+    .kpi-label{color:var(--muted);font-size:12px;font-weight:600}.kpi-value{font-size:28px;font-weight:750;letter-spacing:-.03em;margin-top:4px}.kpi-note{font-size:11px;color:#86919c;margin-top:1px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.card{border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+    .card-head{padding:15px 17px 7px}.card h2{font-size:15px;margin:0}.card p{font-size:12px;color:var(--muted);margin:3px 0 0}
+    .chart{height:360px}.wide-chart{height:440px}.empty{padding:80px 20px;text-align:center;color:var(--muted)}
+    .source-note{font-size:11px;color:#7d8894;margin-top:14px;text-align:right}
+    .drop{outline:3px dashed var(--cyan);outline-offset:-8px}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    @media(max-width:900px){.brand{align-items:flex-start;flex-direction:column}.file-actions{justify-content:flex-start}.topbar{padding-bottom:68px}.kpis{grid-template-columns:1fr 1fr}.grid-2{grid-template-columns:1fr}.page{padding:16px}.chart{height:330px}}
+    @media(max-width:540px){.kpis{grid-template-columns:1fr}.tabs{padding:0}.tab{flex:1;padding:14px 8px}.toolbar-left,.filters,.field,select{width:100%}.wide-chart{height:390px}}
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div><div class="eyebrow">Operational reporting</div><h1>Activities &amp; Violations</h1><p class="subtitle">Monthly performance, category mix, and trends from the JOC data workbook.</p></div>
+      <div class="file-actions"><span id="fileName" class="file-name">Waiting for workbook</span><button id="graphLoad" class="load-btn" type="button">Connect Microsoft 365</button><label class="load-btn" for="fileInput">Load local Excel</label><input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm"></div>
+    </div>
+  </header>
+  <main>
+    <div id="shell" class="shell">
+      <nav class="tabs" aria-label="Dashboard views">
+        <button class="tab active" data-page="overview" aria-selected="true">Monthly Overview</button>
+        <button class="tab" data-page="trends" aria-selected="false">Trends</button>
+      </nav>
+      <section id="overview" class="page active">
+        <div class="toolbar"><div class="toolbar-left"><div class="field"><label for="monthSelect">Reporting month</label><select id="monthSelect"></select></div><div class="field"><label for="violationBreakdown">Violation pie</label><select id="violationBreakdown"><option value="type">By type</option><option value="subtype">By subtype</option></select></div></div><span id="dataStatus" class="status warn">Load the workbook to begin</span></div>
+        <div class="kpis">
+          <article class="kpi" style="--accent:var(--blue)"><div class="kpi-label">Total activities</div><div id="kpiActivities" class="kpi-value">—</div><div class="kpi-note">Selected month</div></article>
+          <article class="kpi" style="--accent:var(--orange)"><div class="kpi-label">Total incidents</div><div id="kpiIncidents" class="kpi-value">—</div><div class="kpi-note">Violation records</div></article>
+          <article class="kpi" style="--accent:var(--cyan)"><div class="kpi-label">Average activities / day</div><div id="kpiAvg" class="kpi-value">—</div><div class="kpi-note">Across reported days</div></article>
+          <article class="kpi" style="--accent:var(--gold)"><div class="kpi-label">Incident rate</div><div id="kpiRate" class="kpi-value">—</div><div class="kpi-note">Incidents per 100 activities</div></article>
+        </div>
+        <div class="grid-2">
+          <article class="card"><div class="card-head"><h2>Activity mix</h2><p>Share of activity totals by type</p></div><div id="activityDonut" class="chart"></div></article>
+          <article class="card"><div class="card-head"><h2>Violation mix</h2><p>Share of incidents by violation type</p></div><div id="violationDonut" class="chart"></div></article>
+          <article class="card"><div class="card-head"><h2>Activity detail</h2><p>Monthly count by specific subtype</p></div><div id="activityBars" class="chart"></div></article>
+          <article class="card"><div class="card-head"><h2>Violation detail</h2><p>Types with their constituent subtypes stacked</p></div><div id="violationBars" class="chart"></div></article>
+        </div>
+        <div class="source-note">Source: JOC Data Entry sheet · nonnumeric cells are excluded from totals</div>
+      </section>
+      <section id="trends" class="page">
+        <div class="toolbar"><div class="filters"><div class="field"><label for="activityFilter">Activity series</label><select id="activityFilter" multiple aria-describedby="multiHelp"><option value="__ALL__">All activities</option></select></div><div class="field"><label for="violationFilter">Violation series</label><select id="violationFilter" multiple aria-describedby="multiHelp"><option value="__ALL__">All violations</option></select></div><div id="multiHelp" class="filter-help">Use Ctrl/Cmd-click to select multiple series</div></div><button id="resetFilters" class="load-btn" type="button">Reset filters</button></div>
+        <article class="card"><div class="card-head"><h2>Monthly activities and incidents</h2><p id="trendCaption">Compare all monthly totals</p></div><div id="trendChart" class="wide-chart"></div></article>
+        <div class="grid-2" style="margin-top:16px">
+          <article class="card"><div class="card-head"><h2>Activity change</h2><p>Month-over-month movement for the selected series</p></div><div id="activityChange" class="chart"></div></article>
+          <article class="card"><div class="card-head"><h2>Incident change</h2><p>Month-over-month movement for the selected series</p></div><div id="incidentChange" class="chart"></div></article>
+        </div>
+      </section>
+    </div>
+  </main>
+<script>
+(() => {
+  'use strict';
+  const DEFAULT_FILE = 'Violation_Activity_Data_Anonymized.xlsx';
+  const GRAPH_SCOPES = ['Sites.Read.All'];
+  const graphConfig = window.GRAPH_CONFIG || {};
+  const MONTHS = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+  const $ = id => document.getElementById(id);
+  const state = { months: [], fileName: '' };
+  const colors = { activities:['#2f72b7','#56b3c2','#69a97b','#6c83bf','#8cc6cf','#315b83'], violations:['#e68a3f','#f0ba58','#d15b58','#a9688d','#ce7653','#9f6b42'] };
+  const fmt = new Intl.NumberFormat('en-US');
+  const clean = v => String(v ?? '').replace(/\s+/g,' ').trim();
+  const num = v => typeof v === 'number' && Number.isFinite(v) ? v : (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : 0);
+  const sum = arr => arr.reduce((a,b) => a + b, 0);
+  const monthKey = label => { const u=clean(label).toUpperCase().replace(/FEBUARY/g,'FEBRUARY'); const m=MONTHS.findIndex(x=>u.includes(x)); const y=(u.match(/\b(20\d{2})\b/)||[])[1]; return m>=0&&y ? `${y}-${String(m+1).padStart(2,'0')}` : null; };
+  const monthLabel = key => new Date(`${key}-01T12:00:00`).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  function uniqueLabels(cols){ const seen={}; return cols.map(c=>{ const base=c.subtype || c.parent || `Column ${c.index+1}`; seen[base]=(seen[base]||0)+1; return seen[base]===1?base:`${base} (${c.parent})`; }); }
+  function parseWorkbook(workbook){
+    const target = workbook.SheetNames.find(n => n.trim().toLowerCase()==='joc data entry') || workbook.SheetNames.find(n=>/data\s*entry/i.test(n));
+    if(!target) throw new Error('Could not find the “JOC Data Entry” sheet.');
+    const sheet = workbook.Sheets[target];
+    const rows = XLSX.utils.sheet_to_json(sheet,{header:1,raw:true,defval:null,blankrows:true});
+    const starts=[]; rows.forEach((r,i)=>{ const key=monthKey(r[0]); if(key) starts.push({i,key,title:clean(r[0])}); });
+    if(!starts.length) throw new Error('No monthly blocks were found in the data-entry sheet.');
+    const parsed=starts.map((start,si)=>{
+      const end=si+1<starts.length?starts[si+1].i:rows.length;
+      let header=start.i+2;
+      for(let r=start.i+1;r<Math.min(end,start.i+6);r++) if(clean(rows[r]?.[0]).toLowerCase()==='date'){header=r;break;}
+      const subtypeRow=rows[header]||[], parentRow=rows[header-1]||[];
+      let lastParent=''; const cols=[];
+      for(let c=1;c<Math.max(subtypeRow.length,parentRow.length);c++){
+        const p=clean(parentRow[c]); if(p) lastParent=p;
+        const sub=clean(subtypeRow[c]); let kind=null;
+        if(/^violation subtype/i.test(sub)||(/^total$/i.test(sub)&&/^violation type/i.test(lastParent))) kind='violation';
+        if(/^activity subtype/i.test(sub)||/^(OGG|KLEs?)$/i.test(sub)) kind='activity';
+        const parent=(kind==='activity'&&/^(OGG|KLEs?)$/i.test(sub))?sub:(lastParent||kind);
+        if(kind && sub) cols.push({index:c,parent,subtype:sub,kind});
+      }
+      const aCols=cols.filter(c=>c.kind==='activity'), vCols=cols.filter(c=>c.kind==='violation');
+      const aLabels=uniqueLabels(aCols), vLabels=uniqueLabels(vCols); aCols.forEach((c,i)=>c.label=aLabels[i]); vCols.forEach((c,i)=>c.label=vLabels[i]);
+      const daily=[]; let ignored=0;
+      for(let r=header+1;r<end;r++){
+        const day=num(rows[r]?.[0]); if(!(day>=1&&day<=31)) continue;
+        const vals={}; cols.forEach(c=>{ const raw=rows[r]?.[c.index]; if(raw!=null&&raw!==''&&num(raw)===0&&clean(raw)!=='0') ignored++; vals[c.index]=num(raw); });
+        daily.push({day,vals});
+      }
+      const aggregate = kind => {
+        const selected=cols.filter(c=>c.kind===kind), bySubtype={}, byParent={}, subtypeParent={};
+        const groups=Object.groupBy ? Object.groupBy(selected,c=>c.parent) : selected.reduce((a,c)=>((a[c.parent]??=[]).push(c),a),{});
+        Object.entries(groups).forEach(([parent,group])=>{
+          let subtotal=null;
+          if(kind==='violation'){
+            subtotal=group.find(c=>/^total$/i.test(c.subtype))||null;
+            if(!subtotal && group.length>1){
+              const calculated=group.filter(c=>{
+                for(let r=header+1;r<end;r++){
+                  const cell=sheet[XLSX.utils.encode_cell({r,c:c.index})];
+                  if(cell?.f && /SUM|\+/i.test(cell.f)) return true;
+                }
+                return false;
+              });
+              subtotal=calculated.at(-1)||null;
+            }
+          }
+          const details=group.filter(c=>c!==subtotal && !/^total$/i.test(c.subtype));
+          details.forEach(c=>{bySubtype[c.label]=sum(daily.map(d=>d.vals[c.index]||0));subtypeParent[c.label]=parent;});
+          // Rebuild totals from the detail inputs. Cached Excel subtotal formulas in this
+          // workbook are not consistently refreshed and some overlap adjacent groups.
+          byParent[parent]=sum(details.map(c=>bySubtype[c.label]||0));
+        });
+        return {total:sum(Object.values(byParent)),bySubtype,byParent,subtypeParent};
+      };
+      return {key:start.key,label:monthLabel(start.key),daily,activity:aggregate('activity'),violation:aggregate('violation'),ignored};
+    }).filter(m=>m.daily.length).sort((a,b)=>a.key.localeCompare(b.key));
+    if(!parsed.length) throw new Error('Monthly headers were found, but no daily rows could be read.');
+    return parsed;
+  }
+  function plot(id,data,layout={}){ const el=$(id); const base={margin:{l:45,r:20,t:15,b:45},paper_bgcolor:'transparent',plot_bgcolor:'transparent',font:{family:'Inter, Segoe UI, Arial',color:'#52606d',size:12},showlegend:true,legend:{orientation:'h',y:-.16},hoverlabel:{bgcolor:'#10243e',font:{color:'#fff'}},...layout}; Plotly.react(el,data,base,{responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d','autoScale2d']}); }
+  function donut(id,obj,palette){ const labels=Object.keys(obj), values=Object.values(obj); plot(id,[{type:'pie',labels,values,hole:.64,sort:false,textinfo:'percent',textposition:'inside',marker:{colors:palette,line:{color:'#fff',width:2}},hovertemplate:'<b>%{label}</b><br>%{value:,.0f} · %{percent}<extra></extra>'}],{margin:{l:15,r:15,t:10,b:55},legend:{orientation:'h',x:.5,xanchor:'center',y:-.08}}); }
+  function bars(id,obj,color){ const pairs=Object.entries(obj).sort((a,b)=>a[1]-b[1]); plot(id,[{type:'bar',orientation:'h',y:pairs.map(x=>x[0]),x:pairs.map(x=>x[1]),marker:{color},hovertemplate:'<b>%{y}</b><br>%{x:,.0f}<extra></extra>'}],{margin:{l:145,r:25,t:10,b:38},showlegend:false,xaxis:{gridcolor:'#e7edf2',zeroline:false,title:'Count'},yaxis:{automargin:true}}); }
+  function stackedViolations(id,violation){
+    const types=Object.keys(violation.byParent), subtypes=Object.keys(violation.bySubtype);
+    const traces=subtypes.map((sub,i)=>({type:'bar',orientation:'h',name:sub,y:types,x:types.map(type=>violation.subtypeParent[sub]===type?violation.bySubtype[sub]:0),marker:{color:[...colors.violations,'#7887a0','#67a58a','#b47b59','#6f9dc4'][i%10]},hovertemplate:`<b>${sub}</b><br>%{y}: %{x:,.0f}<extra></extra>`}));
+    plot(id,traces,{barmode:'stack',margin:{l:130,r:20,t:10,b:85},xaxis:{title:'Count',gridcolor:'#e7edf2',rangemode:'tozero'},yaxis:{title:'Violation type',automargin:true},legend:{orientation:'h',x:0,y:-.25}});
+  }
+  function renderOverview(){ const m=state.months.find(x=>x.key===$('monthSelect').value)||state.months.at(-1); if(!m)return; $('kpiActivities').textContent=fmt.format(m.activity.total); $('kpiIncidents').textContent=fmt.format(m.violation.total); $('kpiAvg').textContent=(m.activity.total/Math.max(m.daily.length,1)).toFixed(1); $('kpiRate').textContent=m.activity.total?(m.violation.total/m.activity.total*100).toFixed(1):'0.0'; donut('activityDonut',m.activity.byParent,colors.activities); const violationPie=$('violationBreakdown').value==='subtype'?m.violation.bySubtype:m.violation.byParent; donut('violationDonut',violationPie,colors.violations); bars('activityBars',m.activity.bySubtype,'#2f72b7'); stackedViolations('violationBars',m.violation); }
+  function valueFor(m,kind,filter){ return filter==='__ALL__'?m[kind].total:(m[kind].bySubtype[filter]||0); }
+  function changePlot(id,values,color){ const changes=values.map((v,i)=>i===0?null:(values[i-1]===0?(v===0?0:null):(v-values[i-1])/values[i-1]*100)); plot(id,[{type:'bar',x:state.months.map(m=>m.label),y:changes,marker:{color:changes.map(v=>v==null?'#cbd5df':v>=0?color:'#d15b58')},hovertemplate:'<b>%{x}</b><br>%{y:.1f}%<extra></extra>'}],{showlegend:false,margin:{l:55,r:20,t:10,b:65},yaxis:{title:'Change (%)',gridcolor:'#e7edf2',zerolinecolor:'#9eabb7'},xaxis:{tickangle:-35}}); }
+  function selectedValues(select){ const chosen=[...select.selectedOptions].map(o=>o.value); const specific=chosen.filter(v=>v!=='__ALL__'); return specific.length?specific:['__ALL__']; }
+  function renderTrends(){
+    const activitySelections=selectedValues($('activityFilter')), violationSelections=selectedValues($('violationFilter')), labels=state.months.map(m=>m.label);
+    const activityNames=activitySelections.map(v=>v==='__ALL__'?'All activities':v), violationNames=violationSelections.map(v=>v==='__ALL__'?'All incidents':v);
+    const activityPalette=['#2f72b7','#56b3c2','#69a97b','#6c83bf','#315b83','#8cc6cf'], violationPalette=['#e68a3f','#f0ba58','#d15b58','#a9688d','#ce7653','#9f6b42'];
+    const traces=[];
+    activitySelections.forEach((v,i)=>traces.push({type:'scatter',mode:'lines+markers',name:activityNames[i],x:labels,y:state.months.map(m=>valueFor(m,'activity',v)),line:{color:activityPalette[i%activityPalette.length],width:3},marker:{size:7},hovertemplate:`<b>${activityNames[i]}</b><br>%{x}: %{y:,.0f}<extra></extra>`}));
+    violationSelections.forEach((v,i)=>traces.push({type:'scatter',mode:'lines+markers',name:violationNames[i],x:labels,y:state.months.map(m=>valueFor(m,'violation',v)),line:{color:violationPalette[i%violationPalette.length],width:3,dash:'dot'},marker:{size:7},hovertemplate:`<b>${violationNames[i]}</b><br>%{x}: %{y:,.0f}<extra></extra>`}));
+    $('trendCaption').textContent=`${activityNames.length} activity and ${violationNames.length} violation series selected`;
+    plot('trendChart',traces,{margin:{l:55,r:25,t:20,b:85},xaxis:{gridcolor:'#edf1f4',tickangle:-30},yaxis:{title:'Monthly count',gridcolor:'#e7edf2',rangemode:'tozero'},legend:{orientation:'h',x:0,y:-.2}});
+    const activityCombined=state.months.map(m=>sum(activitySelections.map(v=>valueFor(m,'activity',v))));
+    const violationCombined=state.months.map(m=>sum(violationSelections.map(v=>valueFor(m,'violation',v))));
+    changePlot('activityChange',activityCombined,'#2f72b7'); changePlot('incidentChange',violationCombined,'#e68a3f');
+  }
+  function fillSelect(select,items,allLabel){ const current=selectedValues(select); select.innerHTML=`<option value="__ALL__">${allLabel}</option>`; items.forEach(x=>{const o=document.createElement('option');o.value=x;o.textContent=x;select.appendChild(o)}); const valid=current.filter(v=>[...select.options].some(o=>o.value===v)); [...select.options].forEach(o=>o.selected=valid.length?valid.includes(o.value):o.value==='__ALL__'); }
+  function setData(months,name){ state.months=months;state.fileName=name; $('fileName').textContent=name; $('monthSelect').innerHTML=''; months.forEach(m=>{const o=document.createElement('option');o.value=m.key;o.textContent=m.label;$('monthSelect').appendChild(o)}); $('monthSelect').value=months.at(-1).key; const acts=[...new Set(months.flatMap(m=>Object.keys(m.activity.bySubtype)))].sort(), vios=[...new Set(months.flatMap(m=>Object.keys(m.violation.bySubtype)))].sort(); fillSelect($('activityFilter'),acts,'All activities');fillSelect($('violationFilter'),vios,'All violations'); const ignored=sum(months.map(m=>m.ignored)); $('dataStatus').textContent=`${months.length} months loaded${ignored?` · ${ignored} text cells excluded`:''}`;$('dataStatus').className=ignored?'status warn':'status'; renderOverview();renderTrends(); }
+  function loadBuffer(buffer,name){ try{ if(!window.XLSX||!window.Plotly)throw new Error('Dashboard libraries could not load. Connect to the internet and reopen this file.'); const wb=XLSX.read(buffer,{type:'array',cellDates:true});setData(parseWorkbook(wb),name); }catch(err){ $('dataStatus').textContent=err.message;$('dataStatus').className='status warn';console.error(err);alert(`Could not load the workbook:\n${err.message}`); } }
+  function graphPath(path){ return String(path||'').split('/').filter(Boolean).map(encodeURIComponent).join('/'); }
+  async function graphJson(url,token){
+    const response=await fetch(url,{headers:{Authorization:`Bearer ${token}`,Accept:'application/json'}});
+    if(!response.ok){const detail=await response.text();throw new Error(`Microsoft Graph ${response.status}: ${detail.slice(0,240)}`);}
+    return response.json();
+  }
+  async function graphToken(){
+    if(!graphConfig.clientId || /PASTE|YOUR_/i.test(graphConfig.clientId)) throw new Error('Add the Microsoft Entra application Client ID to graph-config.js first.');
+    if(!window.msal) throw new Error('Microsoft sign-in library could not load.');
+    const authority=`https://login.microsoftonline.com/${graphConfig.tenantId||'organizations'}`;
+    const app=new msal.PublicClientApplication({auth:{clientId:graphConfig.clientId,authority,redirectUri:location.origin+location.pathname},cache:{cacheLocation:'sessionStorage'}});
+    await app.initialize?.();
+    let account=app.getAllAccounts()[0];
+    if(!account){const result=await app.loginPopup({scopes:GRAPH_SCOPES,prompt:'select_account'});account=result.account;}
+    try{return (await app.acquireTokenSilent({scopes:GRAPH_SCOPES,account})).accessToken;}
+    catch{return (await app.acquireTokenPopup({scopes:GRAPH_SCOPES,account})).accessToken;}
+  }
+  async function loadFromGraph(){
+    const button=$('graphLoad'); button.disabled=true;
+    try{
+      $('dataStatus').textContent='Signing in to Microsoft 365…'; $('dataStatus').className='status warn';
+      const token=await graphToken();
+      const host=graphConfig.siteHost||'unitednations.sharepoint.com';
+      const sitePath=graphConfig.sitePath||'/sites/DPO-DPET/DPO-DPET-OD-ET';
+      const folder=graphConfig.folderPath||'Activities & Violations Dashboard';
+      const site=await graphJson(`https://graph.microsoft.com/v1.0/sites/${host}:${sitePath}?$select=id`,token);
+      $('dataStatus').textContent='Looking for the workbook in SharePoint…';
+      const listing=await graphJson(`https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(site.id)}/drive/root:/${graphPath(folder)}:/children?$select=id,name,file,lastModifiedDateTime`,token);
+      const files=(listing.value||[]).filter(item=>item.file&&/\.xls[xm]?$/i.test(item.name));
+      const requested=graphConfig.workbookName||DEFAULT_FILE;
+      const item=files.find(file=>file.name.toLowerCase()===requested.toLowerCase())||files[0];
+      if(!item) throw new Error(`No Excel workbook was found in “${folder}”.`);
+      $('dataStatus').textContent=`Loading ${item.name} from SharePoint…`;
+      const response=await fetch(`https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(site.id)}/drive/items/${encodeURIComponent(item.id)}/content`,{headers:{Authorization:`Bearer ${token}`}});
+      if(!response.ok) throw new Error(`Could not download the workbook (${response.status}).`);
+      loadBuffer(await response.arrayBuffer(),item.name);
+      $('graphLoad').textContent='Reload from Microsoft 365';
+    }catch(err){
+      console.error(err); $('dataStatus').textContent=err.message; $('dataStatus').className='status warn';
+    }finally{button.disabled=false;}
+  }
+  async function tryDefault(){
+    if(location.protocol==='file:'){
+      $('dataStatus').textContent='Use Open Dashboard.bat for automatic loading';
+      $('dataStatus').className='status warn';
+      return;
+    }
+    try{
+      $('dataStatus').textContent='Loading workbook…';
+      const res=await fetch(encodeURI(DEFAULT_FILE),{cache:'no-store'});
+      if(!res.ok)throw new Error(`Workbook not found (${res.status})`);
+      loadBuffer(await res.arrayBuffer(),DEFAULT_FILE);
+    }catch(err){
+      $('dataStatus').textContent=`Automatic loading failed: ${err.message}`;
+      $('dataStatus').className='status warn';
+    }
+  }
+  function selectOnlyAll(select){[...select.options].forEach(o=>o.selected=o.value==='__ALL__');}
+  if(!graphConfig.clientId || /PASTE|YOUR_/i.test(graphConfig.clientId)) $('graphLoad').hidden=true;
+  $('graphLoad').addEventListener('click',loadFromGraph); $('fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if(f)loadBuffer(await f.arrayBuffer(),f.name)}); $('monthSelect').addEventListener('change',renderOverview); $('violationBreakdown').addEventListener('change',renderOverview); $('activityFilter').addEventListener('change',renderTrends);$('violationFilter').addEventListener('change',renderTrends);$('resetFilters').addEventListener('click',()=>{selectOnlyAll($('activityFilter'));selectOnlyAll($('violationFilter'));renderTrends()});
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>{x.classList.toggle('active',x===t);x.setAttribute('aria-selected',x===t)});document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===t.dataset.page));setTimeout(()=>window.dispatchEvent(new Event('resize')),10)}));
+  ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$('shell').classList.add('drop')}));['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$('shell').classList.remove('drop')}));document.addEventListener('drop',async e=>{const f=[...e.dataTransfer.files].find(x=>/\.xls[xm]?$/i.test(x.name));if(f)loadBuffer(await f.arrayBuffer(),f.name)});
+  tryDefault();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+activities-violations-dashboard/
+SharePoint Deployment/
+.tools/
+Open Dashboard.bat
+*.sppkg
+node_modules/
+temp/
+dist/
+lib/
+lib-commonjs/
+release/
+jest-output/
