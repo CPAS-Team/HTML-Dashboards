@@ -81,7 +81,7 @@
         <div class="source-note">Source: JOC Data Entry sheet · nonnumeric cells are excluded from totals</div>
       </section>
       <section id="trends" class="page">
-        <div class="toolbar"><div class="filters"><div class="field"><label for="activityFilter">Activity series</label><select id="activityFilter" multiple aria-describedby="multiHelp"><option value="__ALL__">All activities</option></select></div><div class="field"><label for="violationFilter">Violation series</label><select id="violationFilter" multiple aria-describedby="multiHelp"><option value="__ALL__">All violations</option></select></div><div id="multiHelp" class="filter-help">Use Ctrl/Cmd-click to select multiple series</div></div><button id="resetFilters" class="load-btn" type="button">Reset filters</button></div>
+        <div class="toolbar"><div class="filters"><div class="field"><label for="activityFilter">Activity series (multi-select)</label><select id="activityFilter" multiple aria-describedby="multiHelp"><option value="__ALL__">All activities</option></select></div><div class="field"><label for="violationFilter">Violation series (multi-select)</label><select id="violationFilter" multiple aria-describedby="multiHelp"><option value="__ALL__">All violations</option></select></div><div id="multiHelp" class="filter-help">Click items to select or clear any number of activity and violation series</div></div><button id="resetFilters" class="load-btn" type="button">Reset filters</button></div>
         <article class="card"><div class="card-head"><h2>Monthly activities and incidents</h2><p id="trendCaption">Compare all monthly totals</p></div><div id="trendChart" class="wide-chart"></div></article>
         <div class="grid-2" style="margin-top:16px">
           <article class="card"><div class="card-head"><h2>Activity change</h2><p>Month-over-month movement for the selected series</p></div><div id="activityChange" class="chart"></div></article>
@@ -253,8 +253,21 @@
     }
   }
   function selectOnlyAll(select){[...select.options].forEach(o=>o.selected=o.value==='__ALL__');}
+  function enableClickMultiSelect(select){
+    select.addEventListener('mousedown',e=>{
+      const option=e.target.closest('option'); if(!option)return;
+      e.preventDefault();
+      if(option.value==='__ALL__') selectOnlyAll(select);
+      else {
+        option.selected=!option.selected;
+        const all=[...select.options].find(o=>o.value==='__ALL__'); if(all)all.selected=false;
+        if(![...select.options].some(o=>o.selected) && all)all.selected=true;
+      }
+      select.focus(); renderTrends();
+    });
+  }
   if(!graphConfig.clientId || /PASTE|YOUR_/i.test(graphConfig.clientId)) $('graphLoad').hidden=true;
-  $('graphLoad').addEventListener('click',loadFromGraph); $('fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if(f)loadBuffer(await f.arrayBuffer(),f.name)}); $('monthSelect').addEventListener('change',renderOverview); $('violationBreakdown').addEventListener('change',renderOverview); $('activityFilter').addEventListener('change',renderTrends);$('violationFilter').addEventListener('change',renderTrends);$('resetFilters').addEventListener('click',()=>{selectOnlyAll($('activityFilter'));selectOnlyAll($('violationFilter'));renderTrends()});
+  $('graphLoad').addEventListener('click',loadFromGraph); $('fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if(f)loadBuffer(await f.arrayBuffer(),f.name)}); $('monthSelect').addEventListener('change',renderOverview); $('violationBreakdown').addEventListener('change',renderOverview); enableClickMultiSelect($('activityFilter'));enableClickMultiSelect($('violationFilter'));$('activityFilter').addEventListener('change',renderTrends);$('violationFilter').addEventListener('change',renderTrends);$('resetFilters').addEventListener('click',()=>{selectOnlyAll($('activityFilter'));selectOnlyAll($('violationFilter'));renderTrends()});
   document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>{x.classList.toggle('active',x===t);x.setAttribute('aria-selected',x===t)});document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===t.dataset.page));setTimeout(()=>window.dispatchEvent(new Event('resize')),10)}));
   ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$('shell').classList.add('drop')}));['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$('shell').classList.remove('drop')}));document.addEventListener('drop',async e=>{const f=[...e.dataTransfer.files].find(x=>/\.xls[xm]?$/i.test(x.name));if(f)loadBuffer(await f.arrayBuffer(),f.name)});
   tryDefault();
